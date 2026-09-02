@@ -188,10 +188,20 @@ export const AuditView: React.FC<AuditViewProps> = ({ logs, onTriggerSimulatedAu
 
         <div className={`p-4 rounded-2xl border ${isDark ? 'bg-[#080d18] border-white/10' : 'bg-white border-slate-200 shadow-sm'}`}>
           <div className="text-xs text-slate-400 font-semibold flex items-center justify-between">
-            <span>Stopping Rules Enforced</span>
-            <Lock className="w-4 h-4 text-rose-400" />
+            <span>Gateway Declines</span>
+            <AlertTriangle className="w-4 h-4 text-rose-400" />
           </div>
           <div className="text-xl font-extrabold font-mono text-rose-400 mt-1">
+            {allLogs.filter((l) => l.flag === 'FAIL' || l.flag === 'FAILED' || l.action === 'PAYMENT_FAILED').length} Intercepted
+          </div>
+        </div>
+
+        <div className={`p-4 rounded-2xl border ${isDark ? 'bg-[#080d18] border-white/10' : 'bg-white border-slate-200 shadow-sm'}`}>
+          <div className="text-xs text-slate-400 font-semibold flex items-center justify-between">
+            <span>Stopping Rules Enforced</span>
+            <Lock className="w-4 h-4 text-amber-400" />
+          </div>
+          <div className="text-xl font-extrabold font-mono text-amber-400 mt-1">
             {allLogs.filter((l) => l.flag === 'STOPPING_RULE').length || 2} Halted
           </div>
         </div>
@@ -250,8 +260,9 @@ export const AuditView: React.FC<AuditViewProps> = ({ logs, onTriggerSimulatedAu
               }`}
             >
               <option value="all">All Compliance Flags</option>
-              <option value="PASS">PASS (Compliant)</option>
-              <option value="STOPPING_RULE">STOPPING_RULE (Halted)</option>
+              <option value="PASS">PASS (Compliant / Settled)</option>
+              <option value="FAIL">FAIL (Payment Failed / Gateway Decline)</option>
+              <option value="STOPPING_RULE">STOPPING_RULE (Halted / Exited)</option>
             </select>
           </div>
         </div>
@@ -281,6 +292,7 @@ export const AuditView: React.FC<AuditViewProps> = ({ logs, onTriggerSimulatedAu
                 </tr>
               ) : (
                 filteredLogs.map((log) => {
+                  const isFail = log.flag === 'FAIL' || log.flag === 'FAILED' || log.action === 'PAYMENT_FAILED' || log.action === 'WEBHOOK_PAYMENT_FAILED';
                   const isHalt = log.flag === 'STOPPING_RULE';
                   const isWebhook = log.actor === 'razorpay_webhook';
                   const isAI = log.actor === 'gemini_agent';
@@ -310,8 +322,13 @@ export const AuditView: React.FC<AuditViewProps> = ({ logs, onTriggerSimulatedAu
                         {log.details}
                       </td>
                       <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                        {isHalt ? (
-                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30 font-mono">
+                        {isFail ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30 font-mono">
+                            <AlertTriangle className="w-3 h-3" />
+                            GATEWAY_DECLINE
+                          </span>
+                        ) : isHalt ? (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 font-mono">
                             STOPPING_RULE
                           </span>
                         ) : (

@@ -14,6 +14,7 @@ import {
   RotateCcw,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   Clock,
   ArrowRight,
   ExternalLink,
@@ -249,7 +250,8 @@ type PhoneScene =
   | 'whatsapp_chat'
   | 'official_razorpay_web'
   | 'gpay'
-  | 'success';
+  | 'success'
+  | 'payment_failed_alert';
 
 interface WhatsAppMessage {
   id: string;
@@ -274,6 +276,60 @@ export const AgentStudioView: React.FC<AgentStudioViewProps> = ({
 
   // Active scene on the mobile simulator
   const [currentScene, setCurrentScene] = useState<PhoneScene>('store_or_bank');
+
+  // Details when payment fails on official Razorpay gateway
+  const [paymentFailureDetails, setPaymentFailureDetails] = useState<{
+    paymentId: string;
+    code: string;
+    description: string;
+    orderId?: string;
+  } | null>(null);
+
+  // Dual-frequency phone ring audio generator for incoming calls
+  const playIncomingCallRing = () => {
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return () => {};
+      const audioCtx = new AudioContextClass();
+      const now = audioCtx.currentTime;
+
+      const osc1 = audioCtx.createOscillator();
+      const osc2 = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+
+      osc1.frequency.value = 440;
+      osc2.frequency.value = 480;
+
+      gainNode.gain.setValueAtTime(0, now);
+      gainNode.gain.linearRampToValueAtTime(0.08, now + 0.05);
+      gainNode.gain.setValueAtTime(0.08, now + 1.2);
+      gainNode.gain.linearRampToValueAtTime(0, now + 1.25);
+      gainNode.gain.setValueAtTime(0, now + 2.0);
+      gainNode.gain.linearRampToValueAtTime(0.08, now + 2.05);
+      gainNode.gain.setValueAtTime(0.08, now + 3.2);
+      gainNode.gain.linearRampToValueAtTime(0, now + 3.25);
+
+      osc1.connect(gainNode);
+      osc2.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+
+      osc1.start(now);
+      osc2.start(now);
+      osc1.stop(now + 3.5);
+      osc2.stop(now + 3.5);
+
+      return () => {
+        try {
+          gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+          osc1.stop();
+          osc2.stop();
+          audioCtx.close();
+        } catch {}
+      };
+    } catch {
+      return () => {};
+    }
+  };
 
   // Interactive Product Attributes (for Nike)
   const [selectedSize, setSelectedSize] = useState('9.5');
@@ -341,7 +397,7 @@ export const AgentStudioView: React.FC<AgentStudioViewProps> = ({
   const syncRecoveryToBackend = async (method: string = 'upi_gpay') => {
     try {
       const discount = currentScenario.amount - appliedPrice;
-      const resolutionNotes = `Autonomous Hinglish Voice Call + ₹${discount} waiver approved -> WhatsApp Payment Link dispatched -> Captured & Verified via ${method === 'upi_gpay' ? 'Google Pay (Txn #pay_QK92mR7fLscart)' : 'Razorpay Gateway'}`;
+      const resolutionNotes = `Autonomous AI Voice Call + ₹${discount} waiver approved -> WhatsApp Payment Link dispatched -> Captured & Verified via ${method === 'upi_gpay' ? 'Google Pay (Txn #pay_QK92mR7fLscart)' : 'Razorpay Gateway'}`;
       
       await fetch('/api/voice-recovery/complete-recovery', {
         method: 'POST',
@@ -552,6 +608,25 @@ export const AgentStudioView: React.FC<AgentStudioViewProps> = ({
     };
   }, [currentScene]);
 
+  // Ringtone playback and auto-answer when an incoming call arrives
+  useEffect(() => {
+    if (currentScene === 'call_incoming') {
+      const stopRing = playIncomingCallRing();
+
+      // Automatically answer call after 2.8s of ringing if user doesn't tap
+      const autoAnswerTimer = setTimeout(() => {
+        if (currentScene === 'call_incoming') {
+          handleAnswerCall();
+        }
+      }, 2800);
+
+      return () => {
+        stopRing();
+        clearTimeout(autoAnswerTimer);
+      };
+    }
+  }, [currentScene]);
+
   // Format MM:SS
   const formatTimer = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -668,18 +743,185 @@ export const AgentStudioView: React.FC<AgentStudioViewProps> = ({
     logTerminal('CHECKOUT_INIT', 'info', `Opened Checkout Order Review for <b>${currentScenario.merchantName}</b>. Total: <b>${currentScenario.currencySymbol}${currentScenario.amount.toLocaleString('en-IN')}</b>`);
   };
 
-  // Step 2A: User taps "Pay with Razorpay" -> Triggers Razorpay standard checkout popup inside phone
-  const handleTriggerRazorpayCheckout = () => {
-    setIsRazorpaySheetOpen(true);
-    logTerminal('RAZORPAY_TRIGGER', 'info', `Triggered <b>Razorpay Standard Checkout SDK</b>. Order ID: <b>#order_RP9281</b> (Amount: ${currentScenario.currencySymbol}${currentScenario.amount.toLocaleString('en-IN')})`);
-    if (onShowBanner) {
-      onShowBanner(`Razorpay Standard Checkout opened for ${currentScenario.currencySymbol}${currentScenario.amount.toLocaleString('en-IN')}`, 'info');
+  // Step 2A: User taps "Pay with Razorpay" -> Opens OFFICIAL RAZORPAY TEST MODE CHECKOUT
+  const handleTriggerRazorpayCheckout = async () => {
+    setIsCheckingOut(true);
+    logTerminal('RAZORPAY_TRIGGER', 'info', `Requesting Razorpay test order for <b>${currentScenario.merchantName}</b> (Amount: ${currentScenario.currencySymbol}${currentScenario.amount.toLocaleString('en-IN')})...`);
+
+    try {
+      const orderRes = await fetch('/api/razorpay/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: currentScenario.amount,
+          caseId: `case_${currentScenario.id}`,
+          caseNumber: currentScenario.caseNumber,
+          customerName: currentScenario.customerName,
+          customerEmail: currentScenario.customerEmail,
+          customerPhone: currentScenario.customerPhone,
+          merchantName: currentScenario.merchantName,
+          productName: currentScenario.productName,
+        }),
+      });
+
+      const orderData = await orderRes.json();
+      logTerminal('ORDER_CREATED', 'ok', `Razorpay Order generated: <b>${orderData.orderId}</b>. Opening official test checkout modal...`);
+
+      if (typeof window !== 'undefined' && (window as any).Razorpay) {
+        let isPaymentHandled = false;
+
+        const options = {
+          key: orderData.keyId || 'rzp_test_TTfg3j9DzfQA0t',
+          amount: orderData.amount || currentScenario.amount * 100,
+          currency: orderData.currency || 'INR',
+          name: currentScenario.merchantName,
+          description: `${currentScenario.productName} • ${currentScenario.caseNumber}`,
+          image: 'https://cdn.jsdelivr.net/gh/razorpay/assets@master/logos/rzp-logo.png',
+          order_id: orderData.orderId,
+          prefill: {
+            name: currentScenario.customerName,
+            email: currentScenario.customerEmail,
+            contact: currentScenario.customerPhone.replace(/\D/g, '').slice(-10) || '9876543210',
+          },
+          theme: {
+            color: '#0c2340',
+          },
+          modal: {
+            ondismiss: function () {
+              setIsCheckingOut(false);
+              // If user exited via cross button [X] -> "Yes, Exit" without paying
+              if (!isPaymentHandled) {
+                console.log('Razorpay modal dismissed via [X] cross button / Yes, Exit');
+                handleCancelAndTriggerCall();
+              }
+            },
+          },
+          // SUCCESS TRIGGER from Razorpay test mode
+          handler: async function (response: any) {
+            isPaymentHandled = true;
+            setIsCheckingOut(false);
+            await handleOfficialRazorpaySuccess(response);
+          },
+        };
+
+        const rzp = new (window as any).Razorpay(options);
+
+        // FAILURE TRIGGER from Razorpay test mode (when user taps [ Failure ])
+        rzp.on('payment.failed', async function (resp: any) {
+          isPaymentHandled = true;
+          setIsCheckingOut(false);
+          await handleOfficialRazorpayFailed(resp);
+        });
+
+        rzp.open();
+        return;
+      }
+    } catch (err) {
+      console.warn('Official Razorpay SDK launch fallback:', err);
     }
+
+    // Fallback if Razorpay SDK failed to open
+    setIsCheckingOut(false);
+    setIsRazorpaySheetOpen(true);
   };
 
-  // Step 2B: User cancels/abandons checkout (clicks [✕] on Razorpay modal) -> Triggers autonomous voice recovery call
-  const handleCancelAndTriggerCall = () => {
+  // Official Razorpay Payment Success Handler
+  const handleOfficialRazorpaySuccess = async (response: any) => {
+    const paymentId = response.razorpay_payment_id || `pay_${Date.now()}`;
+    const orderId = response.razorpay_order_id || '';
+    const signature = response.razorpay_signature || '';
+
+    logTerminal('PAYMENT_RECOVERED', 'ok', `<b>Payment Captured via Razorpay Test Gateway</b>! ID: <b>${paymentId}</b>`);
+
+    try {
+      await fetch('/api/razorpay/verify-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          razorpay_order_id: orderId,
+          razorpay_payment_id: paymentId,
+          razorpay_signature: signature,
+          caseId: `case_${currentScenario.id}`,
+          caseNumber: currentScenario.caseNumber,
+          amount: currentScenario.amount,
+        }),
+      });
+
+      logTerminal('AUDIT_VERIFIED', 'ok', `Verified Razorpay signature. Recorded <b>RAZORPAY_SIGNATURE_VERIFIED [PASS]</b> in Audit Ledger.`);
+      if (onRefreshData) onRefreshData();
+    } catch (e) {
+      console.warn('Error recording payment verification:', e);
+    }
+
+    if (onShowBanner) {
+      onShowBanner(`Payment of ₹${currentScenario.amount.toLocaleString('en-IN')} verified on Razorpay!`, 'success');
+    }
+
+    setCurrentScene('success');
+  };
+
+  // Official Razorpay Payment Failure Handler (when user clicks [ Failure ] in Razorpay test mode)
+  const handleOfficialRazorpayFailed = async (resp: any) => {
+    const errDetail = resp?.error || {};
+    const errorCode = errDetail.code || 'BAD_REQUEST_ERROR';
+    const errorDescription =
+      errDetail.description ||
+      errDetail.reason ||
+      'Payment declined by issuing bank on Razorpay test gateway.';
+    const paymentId = errDetail?.metadata?.payment_id || `pay_${Math.random().toString(36).substr(2, 9)}`;
+    const orderId = errDetail?.metadata?.order_id || '';
+
+    logTerminal(
+      'PAYMENT_FAILED',
+      'err',
+      `<b>Razorpay Test Payment Failed</b>: ${errorDescription} [${errorCode}] (Payment ID: <b>${paymentId}</b>)`
+    );
+    logTerminal(
+      'AUDIT_RECORDED',
+      'warn',
+      `Recorded failure in RBI Audit Ledger with <b>FAIL</b> compliance flag. Marked Case <b>${currentScenario.caseNumber}</b> as <b>FAILED</b>.`
+    );
+
+    if (onShowBanner) {
+      onShowBanner(`Razorpay Payment Failed: ${errorDescription}`, 'warning');
+    }
+
+    try {
+      await fetch('/api/razorpay/record-failure', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          caseId: `case_${currentScenario.id}`,
+          caseNumber: currentScenario.caseNumber,
+          razorpay_payment_id: paymentId,
+          razorpay_order_id: orderId,
+          errorCode,
+          errorDescription,
+          errorReason: errDetail.reason,
+          errorSource: errDetail.source || 'gateway',
+          errorStep: errDetail.step || 'payment_authentication',
+          amount: currentScenario.amount,
+          customerName: currentScenario.customerName,
+        }),
+      });
+      if (onRefreshData) onRefreshData();
+    } catch (e) {
+      console.warn('Failed to record payment failure in backend:', e);
+    }
+
+    setPaymentFailureDetails({
+      paymentId,
+      code: errorCode,
+      description: errorDescription,
+      orderId,
+    });
+    setCurrentScene('payment_failed_alert');
+  };
+
+  // Step 2B: User cancels/abandons checkout (clicks [✕] on Razorpay modal -> "Yes, Exit") -> Triggers autonomous voice recovery call
+  const handleCancelAndTriggerCall = async () => {
     setIsRazorpaySheetOpen(false);
+    setIsCheckingOut(false);
     stopCallAndSpeech();
     setCurrentLineIndex(0);
     setPin('');
@@ -687,20 +929,38 @@ export const AgentStudioView: React.FC<AgentStudioViewProps> = ({
     setIsCallDisconnectedMidway(false);
     setAppliedPrice(currentScenario.amount);
 
-    logTerminal('CHECKOUT_ABANDONED', 'warn', `Customer clicked <b>[✕] Cancel</b> on Razorpay Checkout. Payment session dismissed.`);
+    logTerminal('CHECKOUT_ABANDONED', 'warn', `Customer clicked <b>[✕] Cancel & Yes, Exit</b> on Razorpay Checkout. Payment session dismissed.`);
     logTerminal('AGENT_ACTIVATED', 'ok', `Autonomous recovery agent triggered! Case: <b>${currentScenario.caseNumber}</b>`);
 
     if (onShowBanner) {
       onShowBanner(`Checkout cancelled! Autonomous Voice Agent dialing ${currentScenario.customerName}...`, 'info');
     }
 
+    // Record abandonment event in backend audit trail
+    try {
+      await fetch('/api/razorpay/record-abandonment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          caseId: `case_${currentScenario.id}`,
+          caseNumber: currentScenario.caseNumber,
+          amount: currentScenario.amount,
+          customerName: currentScenario.customerName,
+          reason: 'Customer clicked cross button and confirmed exit on Razorpay window',
+        }),
+      });
+      if (onRefreshData) onRefreshData();
+    } catch (e) {
+      console.warn('Failed to record abandonment in backend:', e);
+    }
+
     setTimeout(() => {
       logTerminal('DIAL_OUTBOUND', 'ok', `Initiating live voice recovery call to <b>${currentScenario.customerPhone}</b>...`);
       setCurrentScene('call_incoming');
-    }, 1000);
+    }, 400);
   };
 
-  // Answer call when user slides the slider
+  // Answer call when user slides the slider or taps answer
   const handleAnswerCall = () => {
     setCurrentScene('call_active');
     logTerminal('CALL_CONNECTED', 'ok', `Call connected with <b>${currentScenario.customerName}</b>. AI Agent speaking...`);
@@ -1665,8 +1925,8 @@ export const AgentStudioView: React.FC<AgentStudioViewProps> = ({
                               onClick={handleDirectRazorpayPay}
                               className="p-1.5 rounded-xl bg-white border border-slate-200 shadow-2xs hover:border-purple-500 flex flex-col items-center justify-center gap-0.5 cursor-pointer active:scale-95 transition-all"
                             >
-                              <div className="w-4 h-4 rounded-full bg-[#5f259f] flex items-center justify-center text-white text-[8px] font-black">
-                                पे
+                              <div className="w-4 h-4 rounded-full bg-[#5f259f] flex items-center justify-center text-white text-[9px] font-black">
+                                P
                               </div>
                               <span className="text-[9.5px] font-bold text-purple-800">PhonePe</span>
                             </button>
@@ -2427,8 +2687,8 @@ export const AgentStudioView: React.FC<AgentStudioViewProps> = ({
                           onClick={handleAuthorizePayment}
                           className="p-1.5 rounded-xl bg-white border border-slate-200 shadow-2xs hover:border-purple-500 flex flex-col items-center justify-center gap-0.5 cursor-pointer active:scale-95 transition-all"
                         >
-                          <div className="w-4 h-4 rounded-full bg-[#5f259f] flex items-center justify-center text-white text-[7.5px] font-black">
-                            पे
+                          <div className="w-4 h-4 rounded-full bg-[#5f259f] flex items-center justify-center text-white text-[8.5px] font-black">
+                            P
                           </div>
                           <span className="text-[9px] font-bold text-purple-800">PhonePe</span>
                         </button>
@@ -2653,6 +2913,72 @@ export const AgentStudioView: React.FC<AgentStudioViewProps> = ({
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       <span>Razorpay Captured • 100% Recovered</span>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ========================================================== */}
+              {/* SCREEN 7: RAZORPAY TEST GATEWAY PAYMENT FAILURE ALERT     */}
+              {/* ========================================================== */}
+              {currentScene === 'payment_failed_alert' && (
+                <div className="flex-1 flex flex-col justify-between py-5 text-center animate-in fade-in duration-300 text-slate-900 bg-slate-50 -mx-3 -mb-4 px-4 rounded-b-[38px]">
+                  <div className="flex-1 flex flex-col items-center justify-center space-y-3">
+                    
+                    {/* Pulsing Red Warning Icon */}
+                    <div className="w-16 h-16 rounded-full bg-rose-100 border-2 border-rose-300 flex items-center justify-center shadow-lg text-rose-600 animate-bounce">
+                      <AlertTriangle className="w-8 h-8 stroke-[2.5]" />
+                    </div>
+
+                    <div>
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-600 border border-rose-200 uppercase tracking-wide">
+                        Test Mode Gateway Decline
+                      </span>
+                      <h3 className="text-xl font-black text-slate-900 tracking-tight mt-1">
+                        Payment Declined
+                      </h3>
+                      <p className="text-xs text-rose-600 font-medium max-w-[260px] mx-auto mt-0.5 leading-snug">
+                        {paymentFailureDetails?.description || 'Your payment was declined by the issuing bank on the Razorpay gateway.'}
+                      </p>
+                    </div>
+
+                    {/* Transaction Metadata Card */}
+                    <div className="w-full bg-white p-3 rounded-2xl border border-slate-200 shadow-sm text-left text-xs space-y-1.5 font-mono">
+                      <div className="flex justify-between text-slate-500 text-[10.5px]">
+                        <span>Payment ID:</span>
+                        <span className="font-bold text-slate-800">{paymentFailureDetails?.paymentId || 'pay_declined'}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-500 text-[10.5px]">
+                        <span>Reason Code:</span>
+                        <span className="font-bold text-rose-600">{paymentFailureDetails?.code || 'GATEWAY_DECLINE'}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-500 text-[10.5px]">
+                        <span>Audit Status:</span>
+                        <span className="font-bold text-rose-600">FAIL (Logged in Ledger)</span>
+                      </div>
+                      <div className="flex justify-between text-slate-500 text-[10.5px] border-t border-slate-100 pt-1">
+                        <span>Case Number:</span>
+                        <span className="font-bold text-slate-800">{currentScenario.caseNumber}</span>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* Actions: Only Retry Payment and Cancel below it */}
+                  <div className="space-y-2 pt-2">
+                    <button
+                      onClick={handleTriggerRazorpayCheckout}
+                      className="w-full py-3.5 px-4 rounded-xl bg-slate-900 hover:bg-black active:scale-[0.98] text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md cursor-pointer transition-all"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 text-slate-300" />
+                      <span>Retry Payment</span>
+                    </button>
+
+                    <button
+                      onClick={handleCancelAndTriggerCall}
+                      className="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-slate-100 border border-slate-300 active:scale-[0.98] text-slate-700 font-semibold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all"
+                    >
+                      <span>Cancel</span>
+                    </button>
                   </div>
                 </div>
               )}

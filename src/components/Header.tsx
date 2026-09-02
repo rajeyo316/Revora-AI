@@ -18,6 +18,7 @@ import {
   ChevronDown,
   Lock,
   Check,
+  FileText,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile } from '../types';
@@ -36,6 +37,7 @@ interface HeaderProps {
   onOpenWebhookSimulator: () => void;
   onOpenIngestTab?: () => void;
   onNavigateDashboard?: () => void;
+  onNavigateAudit?: () => void;
   onRefresh?: () => void;
   isRefreshing?: boolean;
   totalRecovered?: number;
@@ -54,6 +56,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenWebhookSimulator,
   onOpenIngestTab,
   onNavigateDashboard,
+  onNavigateAudit,
   onRefresh,
   isRefreshing = false,
   totalRecovered = 845200,
@@ -272,6 +275,22 @@ export const Header: React.FC<HeaderProps> = ({
                             <span>RBI Compliance Rules</span>
                           </span>
                           <span className="text-xs text-amber-400 font-mono">Active</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setIsUserMenuOpen(false);
+                            if (onNavigateAudit) onNavigateAudit();
+                          }}
+                          className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl transition-colors cursor-pointer ${
+                            isDark ? 'hover:bg-white/5 text-slate-300 hover:text-white' : 'hover:bg-slate-100 text-slate-700'
+                          }`}
+                        >
+                          <span className="flex items-center gap-2">
+                            <FileText className="w-4 h-4 text-cyan-400" />
+                            <span>Audit Trail & Ledger</span>
+                          </span>
+                          <span className="text-xs text-cyan-400 font-mono">Immutable</span>
                         </button>
                       </div>
 

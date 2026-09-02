@@ -21,8 +21,10 @@ import {
   FileText,
   User,
   Building,
+  Terminal,
 } from 'lucide-react';
 import { RecoveryCase, RecoveryChannel } from '../types';
+import { DiagnosticTerminal } from './DiagnosticTerminal';
 
 interface CaseDetailModalProps {
   caseData: RecoveryCase;
@@ -47,6 +49,7 @@ export const CaseDetailModal: React.FC<CaseDetailModalProps> = ({
   const [copiedLink, setCopiedLink] = useState(false);
   const [diagnosing, setDiagnosing] = useState(false);
   const [diagnosisData, setDiagnosisData] = useState<any>(null);
+  const [showTerminal, setShowTerminal] = useState(false);
 
   if (!isOpen) return null;
 
@@ -59,6 +62,7 @@ export const CaseDetailModal: React.FC<CaseDetailModalProps> = ({
   };
 
   const handleRunDeepDiagnosis = async () => {
+    setShowTerminal(true);
     setDiagnosing(true);
     try {
       const res = await fetch('/api/ai/diagnose', {
@@ -69,7 +73,6 @@ export const CaseDetailModal: React.FC<CaseDetailModalProps> = ({
       const data = await res.json();
       if (data.diagnosis) {
         setDiagnosisData(data.diagnosis);
-        setActiveTab('diagnosis');
       }
     } catch (err) {
       console.error('Deep diagnosis error:', err);
@@ -119,7 +122,7 @@ export const CaseDetailModal: React.FC<CaseDetailModalProps> = ({
         <div className="px-6 bg-[#030708]/50 border-b border-white/[0.08] flex space-x-4 text-xs font-medium overflow-x-auto scrollbar-none">
           {[
             { id: 'overview', label: 'Overview & Actions' },
-            { id: 'diagnosis', label: 'AI Root-Cause Diagnosis' },
+            { id: 'diagnosis', label: 'AI Diagnostic Terminal' },
             { id: 'compliance', label: 'Stopping Rules & Compliance' },
             { id: 'ptp', label: 'Promise-to-Pay (PTP)' },
             { id: 'audit', label: `Audit Trail (${caseData.auditTrail.length})` },
@@ -144,15 +147,17 @@ export const CaseDetailModal: React.FC<CaseDetailModalProps> = ({
             <div className="space-y-6">
               {/* Primary Highlights Grid */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-4 rounded-2xl bg-[#030708]/90 border border-white/[0.08]">
-                  <span className="text-slate-400 uppercase tracking-wider text-[10px] font-mono">
-                    Failure Reason & Code
-                  </span>
-                  <div className="font-semibold text-slate-100 mt-1 text-sm">
-                    {caseData.failureReason}
-                  </div>
-                  <div className="text-[11px] text-slate-400 font-mono mt-1">
-                    Code: {caseData.failureCode || 'GATEWAY_ERROR'}
+                <div className="p-4 rounded-2xl bg-[#030708]/90 border border-white/[0.08] flex flex-col justify-between">
+                  <div>
+                    <span className="text-slate-400 uppercase tracking-wider text-[10px] font-mono">
+                      Failure Reason & Code
+                    </span>
+                    <div className="font-semibold text-slate-100 mt-1 text-sm">
+                      {caseData.failureReason}
+                    </div>
+                    <div className="text-[11px] text-slate-400 font-mono mt-1">
+                      Code: {caseData.failureCode || 'GATEWAY_ERROR'}
+                    </div>
                   </div>
                 </div>
 
@@ -202,11 +207,28 @@ export const CaseDetailModal: React.FC<CaseDetailModalProps> = ({
                     {diagnosing ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     ) : (
-                      <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                      <Terminal className="w-3.5 h-3.5 text-indigo-400" />
                     )}
-                    <span>Run AI Diagnosis</span>
+                    <span>{showTerminal ? 'Re-run AI Diagnosis' : 'Run AI Diagnosis'}</span>
                   </button>
                 </div>
+
+                {/* Inline Neural Terminal opened right in place when Run AI Diagnosis is tapped */}
+                {showTerminal && (
+                  <div className="pt-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <DiagnosticTerminal
+                      caseData={caseData}
+                      diagnosisData={diagnosisData}
+                      onRecover={onRecover}
+                      onOpenCheckout={() => {
+                        window.open(`/pay/${caseData.caseNumber.toLowerCase()}`, '_blank');
+                      }}
+                      onOpenVoiceCall={onOpenVoiceCall}
+                      onAutoSettle={onVerifyManualPayment}
+                      autoStart={true}
+                    />
+                  </div>
+                )}
 
                 {/* Razorpay Link preview with direct pay and open actions */}
                 <div className="p-4 rounded-2xl bg-[#080d14] border border-blue-500/30 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
@@ -293,60 +315,17 @@ export const CaseDetailModal: React.FC<CaseDetailModalProps> = ({
 
           {activeTab === 'diagnosis' && (
             <div className="space-y-4">
-              <div className="p-5 rounded-2xl bg-[#030708]/90 border border-white/[0.08] space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="font-bold text-sm text-white flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-emerald-400" />
-                    Neural Intelligence Root-Cause Analysis
-                  </div>
-                  <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                    High Confidence
-                  </span>
-                </div>
-
-                <p className="text-slate-300 text-xs leading-relaxed">
-                  {diagnosisData?.rootCauseDiagnosis ||
-                    caseData.rootCauseDiagnosis ||
-                    'Click "Run AI Diagnosis" to generate deep root cause analysis and custom intervention strategies.'}
-                </p>
-              </div>
-
-              {diagnosisData && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-4 rounded-2xl bg-[#030708]/90 border border-white/[0.08] space-y-2">
-                    <span className="text-[10px] uppercase font-mono text-indigo-400 font-semibold">
-                      Recommended Strategy & Channel
-                    </span>
-                    <div className="font-bold text-white text-xs">
-                      {diagnosisData.recommendedChannel?.toUpperCase()}
-                    </div>
-                    <p className="text-slate-400 text-xs">{diagnosisData.recoveryStrategy}</p>
-                  </div>
-
-                  <div className="p-4 rounded-2xl bg-[#030708]/90 border border-white/[0.08] space-y-2">
-                    <span className="text-[10px] uppercase font-mono text-emerald-400 font-semibold">
-                      Dynamic Incentive & PTP Window
-                    </span>
-                    <div className="font-bold text-emerald-300 text-xs">
-                      {diagnosisData.suggestedDiscountPercent}% Authorized Waiver
-                    </div>
-                    <p className="text-slate-400 text-xs">
-                      Suggested PTP Horizon: {diagnosisData.suggestedPTPDeadlineHours} Hours
-                    </p>
-                  </div>
-
-                  {diagnosisData.whatsappTemplateMessage && (
-                    <div className="col-span-full p-4 rounded-2xl bg-[#030708]/90 border border-emerald-500/30 space-y-2">
-                      <span className="text-[10px] uppercase font-mono text-emerald-400 font-semibold">
-                        Personalized WhatsApp AI Message Template
-                      </span>
-                      <div className="p-3.5 rounded-xl bg-[#080d14] font-mono text-xs text-emerald-200 border border-white/10">
-                        {diagnosisData.whatsappTemplateMessage}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
+              <DiagnosticTerminal
+                caseData={caseData}
+                diagnosisData={diagnosisData}
+                onRecover={onRecover}
+                onOpenCheckout={() => {
+                  window.open(`/pay/${caseData.caseNumber.toLowerCase()}`, '_blank');
+                }}
+                onOpenVoiceCall={onOpenVoiceCall}
+                onAutoSettle={onVerifyManualPayment}
+                autoStart={true}
+              />
             </div>
           )}
 

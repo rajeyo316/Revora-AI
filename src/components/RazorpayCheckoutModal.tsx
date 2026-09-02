@@ -198,7 +198,7 @@ export const RazorpayCheckoutModal: React.FC<RazorpayCheckoutModalProps> = ({
         };
 
         const rzp = new window.Razorpay(options);
-        rzp.on('payment.failed', function (resp: any) {
+        rzp.on('payment.failed', async function (resp: any) {
           const errDetail = resp?.error || {};
           console.warn('Razorpay payment declined by issuing bank:', errDetail.description || errDetail.reason || 'Payment declined');
           setIsProcessing(false);
@@ -206,6 +206,28 @@ export const RazorpayCheckoutModal: React.FC<RazorpayCheckoutModalProps> = ({
             errDetail.description ||
             "Your payment didn't go through as it was declined by the bank. Try UPI or another payment method, or use instant settlement.";
           setPaymentError(failureNotice);
+
+          try {
+            await fetch('/api/razorpay/record-failure', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                caseId: caseData.id,
+                caseNumber: caseData.caseNumber,
+                razorpay_payment_id: errDetail?.metadata?.payment_id,
+                razorpay_order_id: errDetail?.metadata?.order_id,
+                errorCode: errDetail?.code,
+                errorDescription: failureNotice,
+                errorReason: errDetail?.reason,
+                errorSource: errDetail?.source,
+                errorStep: errDetail?.step,
+                amount: caseData.amount,
+                customerName: caseData.customerName,
+              }),
+            });
+          } catch (e) {
+            console.error('Failed to log payment failure:', e);
+          }
         });
         rzp.open();
         return;

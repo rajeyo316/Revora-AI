@@ -413,6 +413,7 @@ function AppContent() {
         onOpenWebhookSimulator={() => setActiveTab('razorpay_api')}
         onOpenIngestTab={() => setActiveTab('ingest')}
         onNavigateDashboard={() => setActiveTab('dashboard')}
+        onNavigateAudit={() => setActiveTab('audit')}
         onRefresh={fetchData}
         isRefreshing={isLoading}
         totalRecovered={totalRecovered}
@@ -546,6 +547,8 @@ function AppContent() {
                   onOpenCaseModal={setInspectedCase}
                   onOpenRazorpayModal={(c) => setCheckoutModalCase(c)}
                   onRecoverCase={handleDeployAction}
+                  onSimulatePayment={handleSimulatePayment}
+                  onNavigateAudit={() => setActiveTab('audit')}
                 />
               )}
 

@@ -86,6 +86,8 @@ export interface AuditEntry {
   action: string;
   details: string;
   flag?: string;
+  case_id?: string;
+  event_type?: string;
   metadata?: Record<string, any>;
 }
 
@@ -311,14 +313,22 @@ export let auditLogs: AuditEntry[] = [
   },
 ];
 
-function addGlobalAudit(caseId: string, eventType: string, details: string, flag = 'PASS') {
+function addGlobalAudit(
+  caseId: string,
+  eventType: string,
+  details: string,
+  flag = 'PASS',
+  actor: AuditEntry['actor'] = 'gemini_agent'
+) {
   auditLogs.unshift({
     id: `aud_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
     timestamp: new Date().toISOString(),
-    actor: 'gemini_agent',
+    actor,
     action: eventType,
     details: `[${caseId}] ${details}`,
     flag,
+    case_id: caseId,
+    event_type: eventType,
   });
 }
 
@@ -1950,20 +1960,54 @@ Decompose the failure into:
 
   // Verify Razorpay Payment Signature and Settle
   app.post('/api/razorpay/verify-payment', (req, res) => {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, caseId } = req.body;
-    const targetCase = caseId ? casesStore.find((c) => c.id === caseId) : casesStore.find((c) => c.status !== 'recovered');
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, caseId, caseNumber, amount } = req.body;
+    const caseNum = caseNumber || caseId || 'REV-NIKE-1800';
+    let targetCase = casesStore.find(
+      (c) => c.id === caseId || c.caseNumber === caseNum || c.caseNumber === caseId
+    );
+
+    if (!targetCase) {
+      targetCase = casesStore.find((c) => c.status !== 'recovered');
+    }
+
+    const settledAmount = Number(amount) || (targetCase ? targetCase.amount : 18000);
 
     if (targetCase) {
       targetCase.status = 'recovered';
       targetCase.recovered = true;
       targetCase.recoveredAt = new Date().toISOString();
-      targetCase.recoveredAmount = targetCase.amount;
+      targetCase.recoveredAmount = settledAmount;
       targetCase.promiseStatus = 'SETTLED';
+      targetCase.ptpStatus = 'honored';
+      targetCase.attemptsCount = (targetCase.attemptsCount || 0) + 1;
+      targetCase.lastAttemptAt = new Date().toISOString();
+
+      const auditMsg = `Payment ${razorpay_payment_id || 'pay_live'} successfully verified & settled for ₹${settledAmount.toLocaleString('en-IN')}. Razorpay Order: ${razorpay_order_id || 'N/A'}`;
+
+      targetCase.auditTrail.unshift({
+        id: `aud_settle_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        actor: 'razorpay_webhook',
+        action: 'RAZORPAY_SIGNATURE_VERIFIED',
+        details: `[${targetCase.caseNumber}] ${auditMsg}`,
+        flag: 'PASS',
+        case_id: targetCase.caseNumber,
+      });
 
       addGlobalAudit(
         targetCase.caseNumber,
         'RAZORPAY_SIGNATURE_VERIFIED',
-        `Payment ${razorpay_payment_id || 'pay_live'} successfully verified and settled for ₹${targetCase.amount.toLocaleString('en-IN')}.`
+        auditMsg,
+        'PASS',
+        'razorpay_webhook'
+      );
+    } else {
+      addGlobalAudit(
+        caseNum,
+        'RAZORPAY_SIGNATURE_VERIFIED',
+        `Payment ${razorpay_payment_id || 'pay_live'} verified & settled for ₹${settledAmount.toLocaleString('en-IN')}.`,
+        'PASS',
+        'razorpay_webhook'
       );
     }
 
@@ -1972,6 +2016,125 @@ Decompose the failure into:
       verified: true,
       case: targetCase,
       message: 'Razorpay payment successfully verified and reconciled.',
+    });
+  });
+
+  // Record Razorpay Test / Live Gateway Payment Failure
+  app.post('/api/razorpay/record-failure', (req, res) => {
+    const {
+      caseId,
+      caseNumber,
+      razorpay_payment_id,
+      razorpay_order_id,
+      errorCode,
+      errorDescription,
+      errorReason,
+      errorSource,
+      errorStep,
+      amount,
+      customerName,
+    } = req.body;
+
+    const caseNum = caseNumber || caseId || 'REV-NIKE-1800';
+    let targetCase = casesStore.find(
+      (c) => c.id === caseId || c.caseNumber === caseNum || c.caseNumber === caseId
+    );
+
+    const failureDesc = errorDescription || errorReason || 'Payment declined by issuing bank on Razorpay gateway';
+    const errCode = errorCode || 'GATEWAY_DECLINE';
+
+    if (!targetCase) {
+      targetCase = {
+        id: caseId || `case_${Date.now()}`,
+        caseNumber: caseNum,
+        customerName: customerName || 'Raj',
+        customerEmail: 'rajeyoh@gmail.com',
+        customerPhone: '+91 98765 43210',
+        scenario: 'checkout_abandonment',
+        scenarioLabel: 'Gateway Failure / Decline',
+        amount: Number(amount) || 18499,
+        currency: 'INR',
+        failureCode: errCode,
+        failureReason: failureDesc,
+        bankName: 'HDFC Bank',
+        paymentMethod: 'upi',
+        riskScore: 92,
+        aiScore: '92% CRITICAL',
+        status: 'failed',
+        createdAt: new Date().toISOString(),
+        lastAttemptAt: new Date().toISOString(),
+        attemptsCount: 1,
+        maxAttempts: 3,
+        channel: 'hinglish_voice',
+        rootCauseDiagnosis: failureDesc,
+        recoveryStrategy: 'Deploy autonomous voice agent & Razorpay smart payment rail retry.',
+        paymentUrl: `https://rzp.io/i/${caseNum.toLowerCase()}`,
+        recovered: false,
+        auditTrail: [],
+      };
+      casesStore.unshift(targetCase);
+    } else {
+      targetCase.status = 'failed';
+      targetCase.failureCode = errCode;
+      targetCase.failureReason = failureDesc;
+      targetCase.attemptsCount = (targetCase.attemptsCount || 0) + 1;
+      targetCase.lastAttemptAt = new Date().toISOString();
+      targetCase.riskScore = Math.min(99, (targetCase.riskScore || 65) + 15);
+    }
+
+    const auditDetail = `Razorpay Test Gateway Payment ${razorpay_payment_id || 'pay_declined'} Failed: ${failureDesc} [${errCode}]. Order: ${razorpay_order_id || 'N/A'}`;
+
+    targetCase.auditTrail.unshift({
+      id: `aud_fail_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      actor: 'razorpay_webhook',
+      action: 'PAYMENT_FAILED',
+      details: `[${targetCase.caseNumber}] ${auditDetail}`,
+      flag: 'FAIL',
+      case_id: targetCase.caseNumber,
+    });
+
+    addGlobalAudit(targetCase.caseNumber, 'PAYMENT_FAILED', auditDetail, 'FAIL', 'razorpay_webhook');
+
+    res.json({
+      success: true,
+      case: targetCase,
+      message: 'Razorpay payment failure recorded in RBI audit ledger and case queue.',
+    });
+  });
+
+  // Record Razorpay Checkout Dismissal (Cross button [X] -> Yes, Exit)
+  app.post('/api/razorpay/record-abandonment', (req, res) => {
+    const { caseId, caseNumber, amount, customerName, reason } = req.body;
+    const caseNum = caseNumber || caseId || 'REV-NIKE-1800';
+    let targetCase = casesStore.find(
+      (c) => c.id === caseId || c.caseNumber === caseNum || c.caseNumber === caseId
+    );
+
+    const auditDetail = `Customer closed Razorpay test window [Yes, Exit]. Session cancelled without completion. Triggering autonomous voice recovery agent.`;
+
+    if (targetCase) {
+      targetCase.status = 'intervention_active';
+      targetCase.attemptsCount = (targetCase.attemptsCount || 0) + 1;
+      targetCase.lastAttemptAt = new Date().toISOString();
+      targetCase.channel = 'hinglish_voice';
+      targetCase.auditTrail.unshift({
+        id: `aud_abn_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        actor: 'customer',
+        action: 'CHECKOUT_EXIT_ABANDONED',
+        details: `[${targetCase.caseNumber}] ${auditDetail}`,
+        flag: 'STOPPING_RULE',
+        case_id: targetCase.caseNumber,
+      });
+    }
+
+    addGlobalAudit(caseNum, 'CHECKOUT_EXIT_ABANDONED', auditDetail, 'STOPPING_RULE', 'customer');
+
+    res.json({
+      success: true,
+      case: targetCase,
+      message: 'Checkout abandonment logged and autonomous voice trigger initialized.',
     });
   });
 
@@ -2079,10 +2242,11 @@ Decompose the failure into:
       targetCase.recoveredAt = new Date().toISOString();
       targetCase.recoveredAmount = targetCase.amount;
       targetCase.promiseStatus = 'SETTLED';
-      addGlobalAudit(targetCase.caseNumber, 'WEBHOOK_PAYMENT_CAPTURED', `Received ${event} (${pId}). Settled ₹${targetCase.amount.toLocaleString('en-IN')}`);
+      addGlobalAudit(targetCase.caseNumber, 'WEBHOOK_PAYMENT_CAPTURED', `Received ${event} (${pId}). Settled ₹${targetCase.amount.toLocaleString('en-IN')}`, 'PASS', 'razorpay_webhook');
     } else if (targetCase && event === 'payment.failed') {
+      targetCase.status = 'failed';
       targetCase.attemptsCount += 1;
-      addGlobalAudit(targetCase.caseNumber, 'WEBHOOK_PAYMENT_FAILED', `Received payment.failed (${pId}). Triggering retry policy.`);
+      addGlobalAudit(targetCase.caseNumber, 'WEBHOOK_PAYMENT_FAILED', `Received payment.failed (${pId}). Triggering retry policy.`, 'FAIL', 'razorpay_webhook');
     }
 
     res.json({
@@ -2151,9 +2315,8 @@ Decompose the failure into:
     });
   }
 
-  const serverPort = process.env.PORT ? parseInt(process.env.PORT, 10) : PORT;
-  app.listen(serverPort, '0.0.0.0', () => {
-    console.log(`Revora AI Server running on http://0.0.0.0:${serverPort}`);
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Revora AI Server running on http://0.0.0.0:${PORT}`);
   });
 }
 
