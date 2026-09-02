@@ -1,0 +1,46 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // User profiles - each user manages their own profile
+    match /revora_users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(userId);
+    }
+
+    // Per-user isolated recovery data
+    match /users/{userId}/recovery_cases/{caseId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // Per-user isolated settings & Razorpay credentials
+    match /users/{userId}/settings/{settingId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // Global merchant recovery pipeline (workspace authenticated)
+    match /recovery_cases/{caseId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Audit and compliance logs
+    match /audit_logs/{logId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Default catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+

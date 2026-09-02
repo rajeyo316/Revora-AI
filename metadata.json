@@ -1,0 +1,6 @@
+{
+  "name": "Revora AI",
+  "description": "Autonomous AI agent that identifies at-risk revenue, determines smart interventions, and executes bounded recovery workflows with Razorpay API and Webhook integration.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

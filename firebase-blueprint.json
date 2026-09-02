@@ -1,0 +1,98 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Registered Revora SaaS merchant/admin profile",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Firebase Auth UID"
+        },
+        "name": {
+          "type": "string",
+          "description": "Full name of the fintech officer or merchant"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Work email of the user"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["fintech_admin", "recovery_manager", "finance_analyst"],
+          "description": "Role in the organization"
+        },
+        "avatarUrl": {
+          "type": "string",
+          "description": "Avatar URL or Dicebear seed"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of account creation"
+        },
+        "lastLoginAt": {
+          "type": "string",
+          "description": "ISO timestamp of last login"
+        }
+      },
+      "required": ["id", "name", "email", "role"]
+    },
+    "RecoveryCase": {
+      "title": "RecoveryCase",
+      "description": "Payment failure or revenue at risk case",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique recovery case identifier"
+        },
+        "userId": {
+          "type": "string",
+          "description": "UID of the merchant"
+        },
+        "customerName": {
+          "type": "string",
+          "description": "End customer name"
+        },
+        "customerEmail": {
+          "type": "string",
+          "format": "email",
+          "description": "Customer contact email"
+        },
+        "amount": {
+          "type": "number",
+          "description": "Amount in INR at risk"
+        },
+        "currency": {
+          "type": "string",
+          "description": "Currency code (INR)"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["open", "in_recovery", "recovered", "settled", "disputed", "failed"],
+          "description": "Current lifecycle status"
+        },
+        "failureReason": {
+          "type": "string",
+          "description": "Error code or failure description from Razorpay"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp"
+        }
+      },
+      "required": ["id", "userId", "customerName", "amount", "status"]
+    }
+  },
+  "firestore": {
+    "/revora_users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Revora merchant profiles"
+    },
+    "/recovery_cases/{caseId}": {
+      "schema": "RecoveryCase",
+      "description": "Telemetry and recovery incidents"
+    }
+  }
+}
