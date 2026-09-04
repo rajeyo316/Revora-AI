@@ -1,4 +1,4 @@
-# ⚡ Revora AI — Autonomous Revenue Recovery Platform
+#  Revora AI — Autonomous Revenue Recovery Platform
 > **FROM RISK TO REVENUE — From Bank Failure to Instant Settlement.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
