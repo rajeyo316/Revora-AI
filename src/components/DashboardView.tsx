@@ -691,16 +691,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               })}
             </div>
           </div>
-
-          <div className="pt-4 border-t border-white/10 mt-3">
-            <button
-              onClick={() => onNavigateTab('diag')}
-              className="w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold text-cyan-400 border border-cyan-500/20 flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
-            >
-              <span>View Deep AI Diagnostic Matrix</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
         </div>
       </motion.div>
 

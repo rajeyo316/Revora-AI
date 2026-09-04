@@ -75,7 +75,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'agent_studio', label: 'Revora Agent', icon: <Mic className="w-4.5 h-4.5" /> },
     { id: 'queue', label: 'Recovery Queue', icon: <Layers className="w-4.5 h-4.5" /> },
     { id: 'ingest', label: 'Ingest Failed Case', icon: <PlusCircle className="w-4.5 h-4.5" /> },
-    { id: 'diag', label: 'AI Root Cause Matrix', icon: <Cpu className="w-4.5 h-4.5" /> },
     { id: 'p2p', label: 'Promise-to-Pay (P2P)', icon: <Calendar className="w-4.5 h-4.5" /> },
     { id: 'batch', label: 'Batch Execution & Safety', icon: <Zap className="w-4.5 h-4.5" /> },
     { id: 'settings', label: 'Settings & Rails', icon: <Sliders className="w-4.5 h-4.5" /> },
