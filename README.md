@@ -9,7 +9,7 @@
 [![Compliance](https://img.shields.io/badge/Compliance-RBI%20Fair%20Contact%20Code-emerald)](#regulatory-compliance--safety-guardrails)
 
 **Author & Creator:** Rajeyo Haldar  
-**Live Platform:** [https://ais-dev-qa5gpklfeimf36gjlefskw-887605548801.asia-southeast1.run.app](https://ais-dev-qa5gpklfeimf36gjlefskw-887605548801.asia-southeast1.run.app)
+**Live Platform:** [https://revora-ai-110633722927.asia-southeast1.run.app/](https://revora-ai-110633722927.asia-southeast1.run.app/)
 
 ---
 
