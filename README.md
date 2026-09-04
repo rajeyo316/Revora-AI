@@ -138,6 +138,6 @@ This project is licensed under the MIT License — see the [LICENSE](LICENSE) fi
 ---
 
 <p align="center">
-  <b>Built with ❤️ by Rajeyo Haldar</b><br>
+  <b>Built for recover by Rajeyo Haldar.</b><br>
   <i>Revora AI — From Bank Failure to Instant Settlement.</i>
 </p>
